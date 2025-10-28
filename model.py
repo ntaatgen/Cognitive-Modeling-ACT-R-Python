@@ -7,6 +7,8 @@ class Model(object):
     # Model parameters
 
     ga = 1.0 # spreading activation from the goal (:ga; default: 1.0)
+    imaginal_spreading = 0.0 # spreading activation from the imaginal buffer. 0.0 by default, so no spreading
+    
     mas = 2.0 # maxmimum spreading (:mas; default: 2.0)
 
     d = 0.5 # decay (:bll; default: 0.5)
@@ -34,6 +36,8 @@ class Model(object):
         """
         Find the Chunk given its name
         """
+        if type(name) == Chunk:
+            return name
         chunk_idx = [i for i, j in enumerate(self.dm) if j.name == name]
         if len(chunk_idx) == 0:
             return None
@@ -101,7 +105,7 @@ class Model(object):
 
         baselevel_activation = math.log(sum([(self.time - encounter) ** -self.d for encounter in chunk.encounters if encounter < self.time]))
 
-        spreading_activation = self.get_spreading_activation_from_goal(chunk)
+        spreading_activation = self.get_spreading_activation(chunk)
 
         return baselevel_activation + spreading_activation
     
@@ -129,27 +133,33 @@ class Model(object):
         return s * math.log((1 - rand)/rand)
 
 
-    def get_spreading_activation_from_goal(self, chunk):
+    def get_spreading_activation(self, chunk):
         """
-        Calculate the amount of spreading activation from the goal buffer to the specified chunk.
+        Calculate the amount of spreading activation from the goal and imaginal buffers to the specified chunk.
         """
-
-        if self.goal is None:
-            return 0
-
-        if type(self.goal) is Chunk:
+        total_spreading = 0.0
+        if type(self.goal) is Chunk and self.ga > 0:
             spreading = 0.0
             total_slots = 0
             for value in self.goal.slots.values():
-                total_slots += 1
                 ch1 = self.get_chunk(value)
                 if ch1 != None and value in chunk.slots.values() and ch1.fan > 0:
+                    total_slots += 1
                     spreading += max(0, self.mas - math.log(ch1.fan))
-        
-        if total_slots == 0:
-            return 0
+            if total_slots > 0:
+                total_spreading += spreading * (self.ga / total_slots)
+        if type(self.imaginal) is Chunk and self.imaginal_spreading > 0:
+            spreading = 0.0
+            total_slots = 0
+            for value in self.imaginal.slots.values():
+                ch1 = self.get_chunk(value)
+                if ch1 != None and value in chunk.slots.values() and ch1.fan > 0:
+                    total_slots += 1
+                    spreading += max(0, self.mas - math.log(ch1.fan))
+            if total_slots > 0:
+                total_spreading += spreading * (self.imaginal_spreading / total_slots)
 
-        return spreading * (self.ga / total_slots)
+        return total_spreading
 
 
     def match(self, chunk1, pattern):
